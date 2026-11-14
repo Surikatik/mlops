@@ -1,0 +1,11 @@
+stages:
+  preprocess:
+    cmd: python preprocess.py
+    deps:
+      - data
+      - preprocess.py
+    outs:
+      - features/all_features.csv
+    metrics:
+      - reports/data_stats.json:
+          cache: false
