@@ -34,8 +34,8 @@ stages:
       size: 2118
     - path: train.py
       hash: md5
-      md5: a91e7e8862653717d616a023b1473e2c
-      size: 6123
+      md5: b86a94cdf27b7fc5510802b7d35ef6d9
+      size: 7152
     params:
       params.yaml:
         train:
@@ -58,6 +58,10 @@ stages:
       md5: 6db4726bfbeaa89ffa7e5edbb97419d3.dir
       size: 315200
       nfiles: 4
+    - path: reports/feature_reference.json
+      hash: md5
+      md5: 95b941734e6f02caa7c75132d1fdae4b
+      size: 966
     - path: reports/metrics.json
       hash: md5
       md5: 13d2c079774ab72b17b10a7a9ff281b6

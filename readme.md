@@ -39,6 +39,8 @@ pip install -r requirements.txt
 python service/app.py
 # или с явным указанием модели из service/predict.py
 python service/app.py -m baseline_const
+# на macOS порт 5000 занят AirPlay, укажите другой
+python service/app.py -p 8000
 ```
 Веб приложение доступно по ссылке `http://127.0.0.1:5000`
 API endpoint доступен  по ссылке `http://127.0.0.1:5000/api/numbers`
@@ -78,7 +80,7 @@ dvc metrics show
 | Стадия | Команда | Вход | Выход |
 | :--- | :--- | :--- | :--- |
 | `preprocess` | `python preprocess.py` | `data/` | `features/all_features.csv`, `reports/data_stats.json` |
-| `train` | `python train.py` | `features/all_features.csv`, `params.yaml` | `models/*.pkl`, `reports/metrics.json` |
+| `train` | `python train.py` | `features/all_features.csv`, `params.yaml` | `models/*.pkl`, `reports/metrics.json`, `reports/feature_reference.json` |
 
 Добавить новые данные:
 ```sh
@@ -125,6 +127,57 @@ python service/app.py -m models/random_forest.pkl
 | `lin_reg` | 2 969 554 | 2 999 843 | 13.3% |
 | `ridge` | 2 884 349 | 2 491 780 | 10.6% |
 | `random_forest` | 3 097 604 | 2 864 231 | 11.7% |
+
+## Тесты и CI/CD (GitHub Actions)
+```sh
+flake8 .
+pytest
+```
+Тесты в `tests/` проверяют API (код ответа, формат, авторизацию, обработку ошибок), построение признаков, разбор объявлений, расчёт дрифта и поведение обученных моделей: правдоподобный диапазон цены и то, что цена не падает с ростом площади. Тесты моделей пропускаются, если `models/` пуста.
+
+Workflow `.github/workflows/ci.yml` запускается при pull request и при push в `main`:
+
+| Job | Что делает |
+| :--- | :--- |
+| `lint` | `flake8` |
+| `test` | `pytest` |
+| `docker` | сборка образа, smoke-тест контейнера, при push в `main` публикация образа в GitHub Container Registry |
+
+## Мониторинг (Prometheus + Grafana)
+Сервис отдаёт метрики в формате Prometheus на `GET /metrics`:
+
+| Метрика | Описание |
+| :--- | :--- |
+| `flat_requests_total` | счётчик запросов по endpoint, методу и коду ответа |
+| `flat_request_duration_seconds` | гистограмма времени ответа |
+| `flat_predicted_price_rub` | гистограмма предсказанных цен |
+| `flat_feature_mean`, `flat_feature_reference_mean` | среднее признака в окне последних 200 запросов и в обучающей выборке |
+| `flat_feature_psi` | Population Stability Index признака относительно обучающей выборки |
+
+Эталонное распределение признаков `reports/feature_reference.json` формируется при обучении. PSI меньше 0.1 означает отсутствие сдвига, от 0.1 до 0.25 умеренный сдвиг, больше 0.25 существенный дрифт.
+
+Запуск сервиса, Prometheus и Grafana:
+```sh
+dvc pull
+docker compose up -d --build
+# если порт 5000 занят
+APP_PORT=8000 docker compose up -d --build
+```
+* сервис: `http://localhost:5000`
+* Prometheus: `http://localhost:9090`
+* Grafana: `http://localhost:3000`, дашборд «Сервис прогнозирования цен на жилье» открывается без входа, администратор `admin` / `admin`
+
+Модель выбирается переменной `MODEL_NAME` (по умолчанию `ridge`), папка `models/` монтируется в контейнер.
+
+Правила оповещений описаны в `monitoring/alerts.yml`: недоступность сервиса, p95 времени ответа выше 500 мс, доля ошибок 5xx выше 5%, PSI признака выше 0.25.
+
+Нагрузка для проверки дашборда создаётся Locust. Переменная `AREA_SHIFT` сдвигает площадь в запросах и имитирует дрифт данных:
+```sh
+locust -f locustfile.py --headless -u 10 -r 5 -t 2m --host http://localhost:5000
+AREA_SHIFT=40 locust -f locustfile.py --headless -u 10 -r 5 -t 2m --host http://localhost:5000
+```
+
+![](img/dashboard.png)
 
 ## Содержание курса
 

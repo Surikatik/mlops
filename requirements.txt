@@ -14,3 +14,7 @@ boto3
 python-dotenv
 flask_httpauth
 locust
+prometheus-client
+gunicorn
+pytest
+flake8
