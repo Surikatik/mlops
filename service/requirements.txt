@@ -1,0 +1,9 @@
+flask
+flask-cors
+flask_httpauth
+python-dotenv
+joblib
+numpy
+scikit-learn
+prometheus-client
+gunicorn

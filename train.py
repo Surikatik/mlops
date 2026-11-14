@@ -22,6 +22,9 @@ from service.predict import FEATURES, build_features
 FEATURES_PATH = Path("features/all_features.csv")
 MODELS_DIR = Path("models")
 METRICS_PATH = Path("reports/metrics.json")
+REFERENCE_PATH = Path("reports/feature_reference.json")
+RAW_FEATURES = ["area", "rooms", "floor", "total_floors"]
+REFERENCE_BINS = 5
 BASELINE = "baseline_const"
 CHAMPION_ALIAS = "champion"
 TRUSTED_TYPES = ["sklearn.tree._tree.Tree"]
@@ -58,7 +61,25 @@ def load_dataset():
         dtype=float,
     )
     y = df["price"].to_numpy(dtype=float)
-    return X, y
+    return df[RAW_FEATURES].reset_index(drop=True), X, y
+
+
+def feature_reference(raw):
+    reference = {}
+    for name in RAW_FEATURES:
+        values = raw[name].to_numpy(dtype=float)
+        quantiles = np.quantile(values, np.linspace(0, 1, REFERENCE_BINS + 1)[1:-1])
+        edges = np.unique(quantiles)
+        counts = np.bincount(
+            np.searchsorted(edges, values, side="left"), minlength=len(edges) + 1
+        )
+        reference[name] = {
+            "mean": float(values.mean()),
+            "std": float(values.std()),
+            "edges": [float(edge) for edge in edges],
+            "fractions": [float(count / len(values)) for count in counts],
+        }
+    return reference
 
 
 def make_estimator(name, model_params, random_state):
@@ -108,11 +129,15 @@ def main():
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
     mlflow.set_experiment(params["experiment"])
 
-    X, y = load_dataset()
-    data = train_test_split(
-        X, y, test_size=params["test_size"], random_state=params["random_state"]
+    raw, X, y = load_dataset()
+    raw_train, _, *data = train_test_split(
+        raw, X, y, test_size=params["test_size"], random_state=params["random_state"]
     )
     X_train, X_test = data[0], data[1]
+
+    REFERENCE_PATH.parent.mkdir(exist_ok=True)
+    with open(REFERENCE_PATH, "w", encoding="utf-8") as f:
+        json.dump(feature_reference(raw_train), f, ensure_ascii=False, indent=2)
 
     tags = {"git_commit": git_commit(), "data_version": data_version()}
     candidates = {BASELINE: {}, **params["models"]}
