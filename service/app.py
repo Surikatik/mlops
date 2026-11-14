@@ -58,9 +58,16 @@ MODEL_NAME = config.get("MODEL_NAME", "baseline_const")
 
 
 def load_predictor(name):
-    """Возвращает predict(X) по имени модели из predict.py или пути к .pkl."""
+    """Возвращает predict(X) по имени модели из predict.py, URI модели MLflow или пути к .pkl."""
     if name in prediction_models.MODELS:
         return prediction_models.MODELS[name]
+    if name.startswith(("models:/", "runs:/")):
+        import mlflow
+
+        mlflow.set_tracking_uri(
+            config.get("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
+        )
+        return mlflow.sklearn.load_model(name).predict
     return joblib.load(name).predict
 
 
@@ -82,26 +89,12 @@ def process_numbers():
 
     app.logger.info(f"Requst data: {data}")
     try:
-        total_meters = float(data["area"])
-        floors_count = int(data["total_floors"])
-        rooms_1 = int(data["rooms"]) == 1
-        rooms_2 = int(data["rooms"]) == 2
-        rooms_3 = int(data["rooms"]) == 3
-        first_floor = int(data["floor"]) == 1
-        last_floor = int(data["floor"]) == floors_count
+        row = prediction_models.build_features(
+            data["area"], data["rooms"], data["floor"], data["total_floors"]
+        )
     except ValueError:
         return {"status": "error", "data": "Ошибка парсинга данных"}
 
-    features = {
-        "total_meters": total_meters,
-        "floors_count": floors_count,
-        "rooms_1": rooms_1,
-        "rooms_2": rooms_2,
-        "rooms_3": rooms_3,
-        "first_floor": first_floor,
-        "last_floor": last_floor,
-    }
-    row = [features[name] for name in prediction_models.FEATURES]
     try:
         price = int(app.config["predict"]([row])[0])
     except NotImplementedError as exc:
@@ -117,7 +110,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-m",
         "--model",
-        help="Имя модели из service/predict.py или путь к сохранённой .pkl модели",
+        help="Имя модели из service/predict.py, URI модели MLflow или путь к .pkl",
         default=MODEL_NAME,
     )
     args = parser.parse_args()

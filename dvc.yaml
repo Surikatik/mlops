@@ -9,3 +9,16 @@ stages:
     metrics:
       - reports/data_stats.json:
           cache: false
+  train:
+    cmd: python train.py
+    deps:
+      - features/all_features.csv
+      - train.py
+      - service/predict.py
+    params:
+      - train
+    outs:
+      - models
+    metrics:
+      - reports/metrics.json:
+          cache: false

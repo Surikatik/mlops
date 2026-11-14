@@ -78,6 +78,7 @@ dvc metrics show
 | Стадия | Команда | Вход | Выход |
 | :--- | :--- | :--- | :--- |
 | `preprocess` | `python preprocess.py` | `data/` | `features/all_features.csv`, `reports/data_stats.json` |
+| `train` | `python train.py` | `features/all_features.csv`, `params.yaml` | `models/*.pkl`, `reports/metrics.json` |
 
 Добавить новые данные:
 ```sh
@@ -88,6 +89,42 @@ git add data.dvc dvc.lock reports/data_stats.json
 git commit -m "update data"
 ```
 Вернуться к предыдущей версии данных: `git checkout <commit> data.dvc dvc.lock && dvc checkout`.
+
+## Обучение и трекинг экспериментов (MLflow)
+Скрипт `train.py` обучает модели из `params.yaml` и константный baseline (медиана цены). Схема валидации: отложенная выборка 20% и 5-fold кросс-валидация на обучающей части.
+
+Каждая модель записывается в MLflow отдельным запуском эксперимента `flat_price`:
+* параметры модели и разбиения;
+* метрики MAE и MAPE на train, validation (среднее по фолдам) и holdout;
+* артефакт модели с сигнатурой и примером входа;
+* теги `git_commit` и `data_version` (хэш данных из `data.dvc`).
+
+Модели сохраняются в `models/<имя>.pkl` и регистрируются в реестре под именем `flat_price`. Лучшая по MAE на кросс-валидации модель получает алиас `champion`, если на отложенной выборке она точнее baseline.
+
+```sh
+dvc repro
+dvc metrics show
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+Интерфейс MLflow доступен по ссылке `http://127.0.0.1:5000`, поэтому сервис при одновременном запуске нужно поднять на другом порту или запустить MLflow с `--port 5001`.
+
+Адрес трекинга задаётся переменной `MLFLOW_TRACKING_URI`, по умолчанию `sqlite:///mlflow.db`.
+
+Запуск сервиса с обученной моделью:
+```sh
+python service/app.py -m ridge
+python service/app.py -m models:/flat_price@champion
+python service/app.py -m models/random_forest.pkl
+```
+
+Результаты на текущей версии данных (80 объявлений):
+
+| Модель | MAE val, руб. | MAE holdout, руб. | MAPE holdout |
+| :--- | ---: | ---: | ---: |
+| `baseline_const` | 6 664 107 | 6 307 500 | 24.8% |
+| `lin_reg` | 2 969 554 | 2 999 843 | 13.3% |
+| `ridge` | 2 884 349 | 2 491 780 | 10.6% |
+| `random_forest` | 3 097 604 | 2 864 231 | 11.7% |
 
 ## Содержание курса
 
