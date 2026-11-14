@@ -179,6 +179,63 @@ AREA_SHIFT=40 locust -f locustfile.py --headless -u 10 -r 5 -t 2m --host http://
 
 ![](img/dashboard.png)
 
+## Чат с ассистентом (Haystack + Ollama)
+Чат отвечает на вопросы о проекте и собранных объявлениях по схеме RAG: «документы → поиск → LLM → ответ». Языковая модель и модель эмбеддингов работают локально в Ollama, данные не покидают контур.
+
+**База знаний** (`service/chat/knowledge.py`):
+* разделы `readme.md` и `disign_doc.md`, разбитые по заголовкам;
+* объявления из `features/all_features.csv`, по одному документу на квартиру;
+* статистика цен по количеству комнат;
+* метрики обученных моделей из `reports/metrics.json`.
+
+**Пайплайн Haystack** (`service/chat/rag.py`):
+
+`OllamaTextEmbedder` → `InMemoryEmbeddingRetriever` + `InMemoryBM25Retriever` → `DocumentJoiner` (reciprocal rank fusion) → `ChatPromptBuilder` → `OllamaChatGenerator`
+
+Длинные разделы документации делятся на фрагменты до 700 символов. Уточняющие вопросы ищутся вместе с предыдущим вопросом пользователя.
+
+**Защитные проверки:**
+* если косинусная близость вопроса к ближайшему документу ниже порога 0.38, ассистент отвечает, что в базе знаний нет информации, и языковая модель не вызывается;
+* ответ, содержащий строки системного промпта, заменяется отказом.
+
+Документы индексируются в `InMemoryDocumentStore` при первом запросе. Промпты хранятся в `service/chat/prompts/` и версионируются в Git вместе с кодом: системный промпт ограничивает ответы контекстом, требует признавать отсутствие информации и отделяет инструкции от пользовательских данных.
+
+| Переменная | Значение по умолчанию | Назначение |
+| :--- | :--- | :--- |
+| `OLLAMA_URL` | `http://localhost:11434` | адрес Ollama |
+| `CHAT_MODEL` | `qwen2.5:1.5b` | языковая модель |
+| `EMBEDDING_MODEL` | `paraphrase-multilingual` | модель эмбеддингов |
+
+Запуск вместе с остальными сервисами, модели скачиваются контейнером `ollama-pull` при первом старте:
+```sh
+docker compose up -d --build
+docker compose logs -f ollama-pull
+```
+Локальный запуск с установленной Ollama:
+```sh
+ollama pull qwen2.5:1.5b
+ollama pull paraphrase-multilingual
+python service/app.py -m ridge
+```
+* страница чата: `http://localhost:5000/chat`
+* `POST /api/chat`: `{"message": "...", "history": [{"role": "user", "content": "..."}]}`, ответ `{"status": "success", "data": "<ответ>", "sources": [...]}`
+* `POST /api/chat/feedback`: `{"rating": "up" | "down", "question": "..."}`, оценка ответа пользователем
+
+Оба endpoint требуют заголовок `Authorization: Bearer <APP_TOKEN>`.
+
+```sh
+curl -X POST http://localhost:5000/api/chat \
+  -H "Authorization: Bearer change_me" -H "Content-Type: application/json" \
+  -d '{"message": "Какая медианная цена двухкомнатной квартиры?"}'
+```
+
+**Мониторинг чата:** метрики `flat_chat_requests_total`, `flat_chat_duration_seconds`, `flat_chat_tokens_total` и `flat_chat_feedback_total` выводятся на дашборд Grafana.
+
+**Оценка качества.** Набор контрольных вопросов `service/chat/eval_questions.json` проверяет поиск (нужный источник попал в контекст), ответ (содержит ожидаемые факты), отказ отвечать на вопрос вне базы знаний и устойчивость к инъекции инструкций. Результаты, параметры и версии промптов записываются в MLflow, эксперимент `flat_chat`:
+```sh
+python evaluate_chat.py
+```
+
 ## Содержание курса
 
 ### Тема 1. Введение в MLOps

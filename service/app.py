@@ -1,5 +1,6 @@
 import argparse
 import os
+import threading
 from logging.config import dictConfig
 
 import dotenv
@@ -83,6 +84,24 @@ def load_predictor(name):
 app.config["predict"] = load_predictor(MODEL_NAME)
 drift_monitor = monitoring.init_monitoring(app)
 
+chat_lock = threading.Lock()
+
+
+def get_chat_engine():
+    with chat_lock:
+        if app.config.get("chat_engine") is None:
+            try:
+                from .chat.rag import ChatEngine
+            except ImportError:
+                from chat.rag import ChatEngine
+
+            app.config["chat_engine"] = ChatEngine(
+                url=config.get("OLLAMA_URL", "http://localhost:11434"),
+                chat_model=config.get("CHAT_MODEL", "qwen2.5:1.5b"),
+                embedding_model=config.get("EMBEDDING_MODEL", "paraphrase-multilingual"),
+            )
+        return app.config["chat_engine"]
+
 
 # Маршрут для отображения формы
 @app.route("/")
@@ -123,6 +142,48 @@ def process_numbers():
     app.logger.info(f"Predicted price: {price}")
 
     return {"status": "success", "data": price}
+
+
+@app.route("/chat")
+def chat_page():
+    return render_template("chat.html")
+
+
+@app.route("/api/chat", methods=["POST"])
+@auth.login_required
+def chat():
+    data = request.get_json(silent=True) or {}
+    message = data.get("message")
+    history = data.get("history") or []
+    if not isinstance(message, str) or not message.strip() or not isinstance(history, list):
+        return {"status": "error", "data": "Ошибка парсинга данных"}, 400
+
+    try:
+        result = get_chat_engine().ask(message, [t for t in history if isinstance(t, dict)])
+    except Exception as exc:
+        app.logger.error(f"Chat error: {exc}")
+        monitoring.CHAT_REQUESTS.labels(status="error").inc()
+        return {"status": "error", "data": "Языковая модель недоступна"}, 503
+
+    monitoring.CHAT_REQUESTS.labels(status="success").inc()
+    monitoring.CHAT_LATENCY.observe(result["latency"])
+    monitoring.CHAT_TOKENS.labels(type="prompt").inc(result["usage"]["prompt_tokens"])
+    monitoring.CHAT_TOKENS.labels(type="completion").inc(result["usage"]["completion_tokens"])
+    app.logger.info(f"Chat question: {message!r}, answer: {result['answer']!r}")
+
+    return {"status": "success", "data": result["answer"], "sources": result["sources"]}
+
+
+@app.route("/api/chat/feedback", methods=["POST"])
+@auth.login_required
+def chat_feedback():
+    data = request.get_json(silent=True) or {}
+    rating = data.get("rating")
+    if rating not in ("up", "down"):
+        return {"status": "error", "data": "Ошибка парсинга данных"}, 400
+    monitoring.CHAT_FEEDBACK.labels(rating=rating).inc()
+    app.logger.info(f"Chat feedback: {rating}, question: {data.get('question')!r}")
+    return {"status": "success", "data": rating}
 
 
 if __name__ == "__main__":

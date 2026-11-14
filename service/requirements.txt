@@ -7,3 +7,5 @@ numpy
 scikit-learn
 prometheus-client
 gunicorn
+haystack-ai
+ollama-haystack

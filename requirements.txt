@@ -8,6 +8,8 @@ matplotlib
 black
 dvc
 mlflow>=3
+haystack-ai
+ollama-haystack
 pyyaml
 flask-cors
 boto3

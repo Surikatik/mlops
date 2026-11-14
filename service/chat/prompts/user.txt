@@ -1,0 +1,10 @@
+КОНТЕКСТ:
+{% for document in documents %}
+[{{ loop.index }}] ({{ document.meta["source"] }}, {{ document.meta["title"] }})
+{{ document.content }}
+{% endfor %}
+
+ВОПРОС:
+<<<{{ question }}>>>
+
+Ответь на ВОПРОС, используя только КОНТЕКСТ. Соблюдай правила.

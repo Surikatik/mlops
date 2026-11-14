@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Чат с ассистентом</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .chat-container {
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        #messages {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            height: 420px;
+            overflow-y: auto;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+
+        .message {
+            margin-bottom: 12px;
+            padding: 8px 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+
+        .user {
+            background-color: #e7f1ff;
+            margin-left: 60px;
+        }
+
+        .assistant {
+            background-color: #f3f3f3;
+            margin-right: 60px;
+        }
+
+        .sources {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+        }
+
+        .feedback button {
+            width: auto;
+            padding: 2px 8px;
+            margin: 6px 4px 0 0;
+            background-color: #fff;
+            color: #333;
+            border: 1px solid #ccc;
+        }
+
+        input, textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background-color: #8fbcf0;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <h2>Чат с ассистентом</h2>
+        <div id="messages"></div>
+        <textarea id="message" rows="2" placeholder="Например: какая медианная цена двухкомнатной квартиры?"></textarea>
+        <input id="token" placeholder="Секретный токен" required>
+        <button id="send" type="button" onclick="sendMessage()">Отправить</button>
+        <p><a href="/">Оценка стоимости квартиры</a></p>
+    </div>
+
+    <script>
+        const history = [];
+
+        function authHeaders() {
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${document.getElementById('token').value}`
+            };
+        }
+
+        function addMessage(role, text) {
+            const item = document.createElement('div');
+            item.className = `message ${role}`;
+            item.textContent = text;
+            const box = document.getElementById('messages');
+            box.appendChild(item);
+            box.scrollTop = box.scrollHeight;
+            return item;
+        }
+
+        function addSources(item, sources) {
+            const titles = [...new Set(sources.map(s => `${s.source}: ${s.title}`))];
+            const block = document.createElement('div');
+            block.className = 'sources';
+            block.textContent = 'Источники: ' + titles.join('; ');
+            item.appendChild(block);
+        }
+
+        function addFeedback(item, question) {
+            const block = document.createElement('div');
+            block.className = 'feedback';
+            for (const [rating, label] of [['up', '👍'], ['down', '👎']]) {
+                const button = document.createElement('button');
+                button.textContent = label;
+                button.onclick = () => {
+                    fetch('/api/chat/feedback', {
+                        method: 'POST',
+                        headers: authHeaders(),
+                        body: JSON.stringify({rating: rating, question: question})
+                    });
+                    block.textContent = 'Спасибо за оценку';
+                };
+                block.appendChild(button);
+            }
+            item.appendChild(block);
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('message');
+            const message = input.value.trim();
+            if (!message) {
+                return;
+            }
+            const button = document.getElementById('send');
+            button.disabled = true;
+            input.value = '';
+            addMessage('user', message);
+            const pending = addMessage('assistant', 'Ассистент думает...');
+
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({message: message, history: history})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data['status'] == 'success') {
+                    pending.textContent = data['data'];
+                    addSources(pending, data['sources']);
+                    addFeedback(pending, message);
+                    history.push({role: 'user', content: message});
+                    history.push({role: 'assistant', content: data['data']});
+                } else {
+                    pending.textContent = 'Ошибка: ' + data['data'];
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                pending.textContent = 'Произошла ошибка при отправке данных';
+            })
+            .finally(() => {
+                button.disabled = false;
+            });
+        }
+
+        document.getElementById('message').addEventListener('keydown', event => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
