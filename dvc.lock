@@ -21,3 +21,44 @@ stages:
       hash: md5
       md5: 004fb6f063baabdbc33bc271805d3cbd
       size: 139
+  train:
+    cmd: python train.py
+    deps:
+    - path: features/all_features.csv
+      hash: md5
+      md5: 1bb92772e07ec079f592f56c69defeef
+      size: 4113
+    - path: service/predict.py
+      hash: md5
+      md5: a6bd6150ae05e81281de0e6a1aa980c2
+      size: 2118
+    - path: train.py
+      hash: md5
+      md5: a91e7e8862653717d616a023b1473e2c
+      size: 6123
+    params:
+      params.yaml:
+        train:
+          test_size: 0.2
+          cv_folds: 5
+          random_state: 42
+          experiment: flat_price
+          registered_model: flat_price
+          models:
+            lin_reg: {}
+            ridge:
+              alpha: 10.0
+            random_forest:
+              n_estimators: 200
+              max_depth: 4
+              min_samples_leaf: 3
+    outs:
+    - path: models
+      hash: md5
+      md5: 6db4726bfbeaa89ffa7e5edbb97419d3.dir
+      size: 315200
+      nfiles: 4
+    - path: reports/metrics.json
+      hash: md5
+      md5: 13d2c079774ab72b17b10a7a9ff281b6
+      size: 1186

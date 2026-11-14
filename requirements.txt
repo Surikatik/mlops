@@ -7,6 +7,8 @@ scikit-learn
 matplotlib
 black
 dvc
+mlflow>=3
+pyyaml
 flask-cors
 boto3
 python-dotenv

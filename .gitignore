@@ -2,3 +2,12 @@
 *.log
 data/
 features/
+models/
+mlflow.db
+mlruns/
+mlartifacts/
+.venv/
+venv/
+.env
+__pycache__/
+.DS_Store
