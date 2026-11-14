@@ -56,6 +56,26 @@ WINDOW_SAMPLES = Gauge(
     "flat_drift_window_samples",
     "Количество запросов в скользящем окне",
 )
+CHAT_REQUESTS = Counter(
+    "flat_chat_requests_total",
+    "Количество запросов к чату",
+    ["status"],
+)
+CHAT_LATENCY = Histogram(
+    "flat_chat_duration_seconds",
+    "Время ответа RAG-пайплайна",
+    buckets=(1, 2.5, 5, 10, 20, 30, 60, 120, 300),
+)
+CHAT_TOKENS = Counter(
+    "flat_chat_tokens_total",
+    "Количество токенов языковой модели",
+    ["type"],
+)
+CHAT_FEEDBACK = Counter(
+    "flat_chat_feedback_total",
+    "Оценки ответов чата пользователями",
+    ["rating"],
+)
 
 
 def psi(expected, actual):
