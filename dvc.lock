@@ -1,0 +1,23 @@
+schema: '2.0'
+stages:
+  preprocess:
+    cmd: python preprocess.py
+    deps:
+    - path: data
+      hash: md5
+      md5: 08fd8e520f6b518fc7d0fd52f79ced29.dir
+      size: 2047145
+      nfiles: 21
+    - path: preprocess.py
+      hash: md5
+      md5: e5fd59aef14b0f5371e5699d9b654ccf
+      size: 5951
+    outs:
+    - path: features/all_features.csv
+      hash: md5
+      md5: 1bb92772e07ec079f592f56c69defeef
+      size: 4113
+    - path: reports/data_stats.json
+      hash: md5
+      md5: 004fb6f063baabdbc33bc271805d3cbd
+      size: 139

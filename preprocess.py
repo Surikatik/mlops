@@ -1,6 +1,7 @@
 import os
 import re
 import glob
+import json
 import pandas as pd
 
 
@@ -109,8 +110,13 @@ def process_excel_file(path: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def main(folder: str, out_dir: str = "features", out_name: str = "all_features.csv"):
-    files = glob.glob(os.path.join(folder, "*.xls*"))
+def main(
+    folder: str,
+    out_dir: str = "features",
+    out_name: str = "all_features.csv",
+    stats_path: str = "reports/data_stats.json",
+):
+    files = sorted(glob.glob(os.path.join(folder, "*.xls*")))
     if not files:
         print(f"В папке '{folder}' не найдено Excel-файлов.")
         return
@@ -136,11 +142,26 @@ def main(folder: str, out_dir: str = "features", out_name: str = "all_features.c
     cols = ["id", "rooms", "area", "floor", "total_floors", "price", "source_file"]
     result = result[cols]
 
+    raw_rows = len(result)
     if result["id"].notna().any():
         before = len(result)
         result = result.drop_duplicates(subset=["id"], keep="first")
         if before != len(result):
             print(f"Удалено дублей по id: {before - len(result)}")
+
+    feature_cols = ["rooms", "area", "floor", "total_floors", "price"]
+    stats = {
+        "files": len(files),
+        "raw_rows": raw_rows,
+        "duplicates": raw_rows - len(result),
+        "rows": len(result),
+        "missing": int(result[feature_cols].isna().sum().sum()),
+        "price_median": float(result["price"].median()),
+        "area_mean": round(float(result["area"].mean()), 2),
+    }
+    os.makedirs(os.path.dirname(stats_path), exist_ok=True)
+    with open(stats_path, "w", encoding="utf-8") as f:
+        json.dump(stats, f, ensure_ascii=False, indent=2)
 
     combined_path = os.path.join(out_dir, out_name)
     result.to_csv(combined_path, index=False, encoding="utf-8-sig")
@@ -149,4 +170,3 @@ def main(folder: str, out_dir: str = "features", out_name: str = "all_features.c
 
 if __name__ == "__main__":
     main(folder="./data", out_dir="./features")
-    

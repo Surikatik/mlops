@@ -58,6 +58,37 @@ API endpoint доступен  по ссылке `http://127.0.0.1:5000/api/numb
 * Этажей в доме
 
 
+## Версионирование данных (DVC)
+Сырые данные (`data/*.xlsx`) и результаты обработки не хранятся в Git: в репозитории лежат только указатели `data.dvc` и `dvc.lock`, а сами файлы находятся в DVC remote.
+
+Remote по умолчанию `myremote` указывает на локальную папку `../dvcstore` рядом с репозиторием. Чтобы использовать другое хранилище:
+```sh
+dvc remote add -d -f myremote /path/to/dvcstore
+```
+
+Получить данные и воспроизвести конвейер:
+```sh
+dvc pull
+dvc repro
+dvc metrics show
+```
+
+Стадии конвейера описаны в `dvc.yaml`:
+
+| Стадия | Команда | Вход | Выход |
+| :--- | :--- | :--- | :--- |
+| `preprocess` | `python preprocess.py` | `data/` | `features/all_features.csv`, `reports/data_stats.json` |
+
+Добавить новые данные:
+```sh
+dvc add data
+dvc repro
+dvc push
+git add data.dvc dvc.lock reports/data_stats.json
+git commit -m "update data"
+```
+Вернуться к предыдущей версии данных: `git checkout <commit> data.dvc dvc.lock && dvc checkout`.
+
 ## Содержание курса
 
 ### Тема 1. Введение в MLOps

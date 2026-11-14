@@ -1,5 +1,6 @@
 cianparser
 pandas
+openpyxl
 flask
 jupyter
 scikit-learn
@@ -9,5 +10,5 @@ dvc
 flask-cors
 boto3
 python-dotenv
-flask_httpauth 
+flask_httpauth
 locust
